@@ -32,12 +32,16 @@ jobs:
       group: deploy-${{ github.repository }}
       cancel-in-progress: false
     steps:
+      - name: Lowercase login
+        id: login
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v7.0.1
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: arn:aws:iam::571355356645:role/gha-deploy-${{ github.repository_owner }}
+          role-to-assume: arn:aws:iam::571355356645:role/gha-deploy-${{ steps.login.outputs.name }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -54,22 +58,22 @@ jobs:
           sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          tags: ${{ steps.login-ecr.outputs.registry }}/cawsperf-${{ github.repository_owner }}:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ${{ steps.login-ecr.outputs.registry }}/cawsperf-${{ steps.login.outputs.name }}:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Render task definition
         id: render-task
         uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
         with:
-          task-definition-family: ${{ github.repository_owner }}-task-definition
+          task-definition-family: ${{ steps.login.outputs.name }}-task-definition
           container-name: wsperf-application
-          image: ${{ steps.login-ecr.outputs.registry }}/cawsperf-${{ github.repository_owner }}:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          image: ${{ steps.login-ecr.outputs.registry }}/cawsperf-${{ steps.login.outputs.name }}:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Deploy to Amazon ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2.6.4
         with:
           task-definition: ${{ steps.render-task.outputs.task-definition }}
-          service: ${{ github.repository_owner }}-service
-          cluster: ${{ github.repository_owner }}-cluster
+          service: ${{ steps.login.outputs.name }}-service
+          cluster: ${{ steps.login.outputs.name }}-cluster
           desired-count: 1
           wait-for-service-stability: true
           wait-for-minutes: 10
